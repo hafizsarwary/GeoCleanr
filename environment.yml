@@ -1,0 +1,12 @@
+name: geocleanr
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.11
+  - pip
+  - geopandas>=0.14
+  - shapely>=2.0
+  - pyproj>=3.6
+  - click>=8.1
+  - pip:
+      - geocleanr @ file:.
