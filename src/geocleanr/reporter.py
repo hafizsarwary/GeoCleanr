@@ -1,97 +1,168 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Iterable, Mapping, List, Dict, Any
+from typing import Iterable, Mapping, Dict, Any, List
 
-# Assuming ValidationIssue is defined in .validator
-# If it's not imported correctly, make sure the file structure is right.
 from .validator import ValidationIssue
 
 
 class ReportBuilder:
-    """Generates human-readable summaries of geospatial data validation.
+    """
+    Builds human-readable summaries and Markdown reports
+    from a collection of ValidationIssue objects.
 
-    This class takes the raw error data found by the Validator and transforms
-    it into statistical summaries and formatted reports (Markdown).
+    Typical usage:
+        builder = ReportBuilder(sample_size=5)
+        summary = builder.build_summary(issues)
+        md = builder.to_markdown(summary)
     """
 
-    def build_summary(self, issues: Iterable[ValidationIssue]) -> Dict[str, Any]:
-        """Aggregates a list of validation errors into a statistical summary.
+    def __init__(self, sample_size: int = 5) -> None:
+        """
+        Args:
+            sample_size: Maximum number of individual issues to include
+                         in the 'sample' section of the report.
+        """
+        self.sample_size = max(sample_size, 0)
 
-        It iterates through the provided issues to calculate total error counts,
-        groups them by the field (column) where they occurred, and extracts a 
-        small sample of specific error messages for review.
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+    def build_summary(self, issues: Iterable[ValidationIssue]) -> Dict[str, Any]:
+        """
+        Aggregates a list/stream of ValidationIssue objects into a summary.
+
+        The summary contains:
+            - 'total_issues': total number of issues
+            - 'by_field': counts of issues per field/column
+            - 'by_message': counts of issues per message text
+            - 'by_code': counts of issues per error code (if available)
+            - 'sample': a list of formatted strings for the first N issues
 
         Args:
-            issues (Iterable[ValidationIssue]): A stream or list of error objects 
-                detected by the validator module. Each object must have 'field', 
-                'index', and 'message' attributes.
+            issues: Any iterable of ValidationIssue objects.
 
         Returns:
-            Dict[str, Any]: A dictionary containing:
-                - 'total_issues' (int): The total count of errors found.
-                - 'by_field' (dict): Counts of errors grouped by column name.
-                - 'sample' (list): A list of formatted strings representing the 
-                  first 5 errors found.
+            A dictionary with aggregated statistics and samples.
         """
-        # Convert the iterable to a list so we can iterate over it multiple times
-        # (e.g., once for counting, once for sampling)
-        issues_list = list(issues)
+        # Materialize the iterable so we can iterate multiple times
+        issues_list: List[ValidationIssue] = list(issues)
 
-        # Count occurrences of errors in each specific column/field using a generator expression
+        # Basic counts
+        total_issues = len(issues_list)
         field_counts = Counter(issue.field for issue in issues_list)
+        message_counts = Counter(issue.message for issue in issues_list)
 
-        # Construct the summary dictionary
-        summary = {
-            "total_issues": len(issues_list),
+        # Optional: group by 'code' if the ValidationIssue has that attribute
+        # (this keeps the code backward-compatible even if 'code' is missing).
+        code_counts: Counter[str] = Counter()
+        for issue in issues_list:
+            code = getattr(issue, "code", None)
+            if code is not None:
+                code_counts[code] += 1
+
+        # Create a preview of the first N issues
+        sample_issues = [
+            self._format_issue(issue)
+            for issue in issues_list[: self.sample_size]
+        ]
+
+        summary: Dict[str, Any] = {
+            "total_issues": total_issues,
             "by_field": dict(field_counts),
-            # Create a readable string for the first 5 issues to serve as a preview
-            "sample": [
-                f"Row #{issue.index} [{issue.field}]: {issue.message}"
-                for issue in issues_list[:5]
-            ],
+            "by_message": dict(message_counts),
+            # Only include 'by_code' if at least one code was found
+            "by_code": dict(code_counts) if code_counts else {},
+            "sample": sample_issues,
         }
         return summary
 
     def to_markdown(self, summary: Mapping[str, Any]) -> str:
-        """Converts a summary dictionary into a Markdown formatted report string.
+        """
+        Converts a summary dictionary into a Markdown-formatted report.
 
         Args:
-            summary (Mapping[str, Any]): The dictionary returned by build_summary().
-                Must contain keys: 'total_issues', 'by_field', and 'sample'.
+            summary: A dictionary usually created by build_summary().
 
         Returns:
-            str: A multi-line string formatted in Markdown, ready to be saved 
-            as a .md file or printed to the console.
+            A Markdown string suitable for saving to a .md file
+            or printing to the console.
         """
-        lines = ["# GeoCleanr Report", ""]
-        
-        # Section 1: High-level totals
-        lines.append(f"**Total issues detected:** {summary.get('total_issues', 0)}")
+        lines: List[str] = ["# GeoCleanr Validation Report", ""]
+
+        # ------------------------------------------------------------------
+        # Section 1: Overall totals
+        # ------------------------------------------------------------------
+        total = summary.get("total_issues", 0)
+        lines.append(f"**Total issues detected:** {total}")
         lines.append("")
 
-        # Section 2: Breakdown by Field
+        if total == 0:
+            lines.append("✅ No validation issues found. Your data looks clean!")
+            return "\n".join(lines)
+
+        # ------------------------------------------------------------------
+        # Section 2: Issues by field
+        # ------------------------------------------------------------------
         lines.append("## Issues by Field")
-        by_field = summary.get("by_field", {})
-        
+        by_field: Mapping[str, int] = summary.get("by_field", {})
+
         if not by_field:
-            lines.append("- *No issues detected.*")
+            lines.append("- *No field-level statistics available.*")
         else:
-            # Sort fields alphabetically for a cleaner report
             for field, count in sorted(by_field.items()):
-                lines.append(f"- **{field}**: {count} issues")
-        
+                lines.append(f"- **{field}**: {count} issue(s)")
         lines.append("")
 
-        # Section 3: Sample Errors
-        lines.append("## Error Samples (First 5)")
-        sample = summary.get("sample", [])
-        
+        # ------------------------------------------------------------------
+        # Section 3: Issues by message (top few patterns)
+        # ------------------------------------------------------------------
+        lines.append("## Issues by Message")
+        by_message: Mapping[str, int] = summary.get("by_message", {})
+
+        if not by_message:
+            lines.append("- *No message-level statistics available.*")
+        else:
+            # Sort by descending frequency, then message text
+            for message, count in sorted(
+                by_message.items(), key=lambda kv: (-kv[1], kv[0])
+            ):
+                lines.append(f"- `{message}` — {count} occurrence(s)")
+        lines.append("")
+
+        # ------------------------------------------------------------------
+        # Section 4: Issues by error code (if any)
+        # ------------------------------------------------------------------
+        by_code: Mapping[str, int] = summary.get("by_code", {})
+        if by_code:
+            lines.append("## Issues by Error Code")
+            for code, count in sorted(by_code.items()):
+                lines.append(f"- **{code}**: {count} issue(s)")
+            lines.append("")
+
+        # ------------------------------------------------------------------
+        # Section 5: Sample issues
+        # ------------------------------------------------------------------
+        lines.append(f"## Sample Issues (first {self.sample_size})")
+        sample: List[str] = summary.get("sample", [])
+
         if not sample:
-            lines.append("- Validation passed for all records.")
+            lines.append("- *No sample issues available.*")
         else:
             for entry in sample:
                 lines.append(f"- {entry}")
 
-        # Join all lines with newline characters to form the final document
         return "\n".join(lines)
+
+    # ----------------------------------------------------------------------
+    # Internal helpers
+    # ----------------------------------------------------------------------
+    def _format_issue(self, issue: ValidationIssue) -> str:
+        """
+        Formats a single ValidationIssue into a concise human-readable string.
+        """
+        base = f"Row #{issue.index} [{issue.field}]: {issue.message}"
+        code = getattr(issue, "code", None)
+        if code is not None:
+            return f"{base} (code={code})"
+        return base
