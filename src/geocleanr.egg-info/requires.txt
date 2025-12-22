@@ -1,0 +1,7 @@
+geopandas>=0.14
+shapely>=2.0
+pyproj>=3.6
+click>=8.1
+
+[dev]
+pytest>=8.0

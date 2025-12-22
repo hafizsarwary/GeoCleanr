@@ -4,52 +4,88 @@
   <img src="assets/geocleanr_logo.jpg" alt="GeoCleanr logo" width="220">
 </p>
 
-GeoCleanr is a lightweight toolkit that demonstrates how to validate, repair, report on, and visualize simple geospatial coordinate data. The project intentionally keeps dependencies minimal so it can run anywhere while still modeling a clean package layout.
+A Lightweight Python Library for Cleaning Geospatial Coordinates
 
-## Features
-- **Validation**: Catch missing coordinates, impossible latitude/longitude ranges, and inconsistent precision with `geocleanr.validator`.
-- **Fixing**: Auto-correct obvious coordinate issues such as swapped axes or clipped values using `geocleanr.fixer`.
-- **Reporting**: Produce concise summaries or Markdown reports that can be shared with analysts and engineers.
-- **Visualization**: Render a quick ASCII heatmap for exploratory checks without pulling heavy plotting libraries.
-- **CLI**: Run validations and fixes from the terminal against newline-delimited JSON or CSV data.
+## Overview
+GeoCleanr is a lightweight, educational Python library for validating, fixing, reporting, and visualizing latitude/longitude data in raw tabular datasets (e.g. CSV files).
+It is designed for students and researchers working with real-world, messy geospatial data before using full GIS tools.
 
-## Project layout
+GeoCleanr focuses specifically on coordinate-level data quality, a common problem not directly addressed by generic data libraries or heavy GIS frameworks.
+
+## Key Features
+- **Validation**: Detects missing, invalid, out-of-range, or swapped latitude/longitude values
+- **Automatic fixing**: Clips coordinates to valid bounds, swaps axes when needed, and applies fallback values
+- **Reporting**: Generates human-readable summaries of detected issues (Markdown/text)
+- **Visualization**: Provides a simple ASCII heatmap for spatial overview
+- **CLI support**: Run validation and reporting from the terminal on CSV or NDJSON data
+- **Testing**: Includes automated tests for core functionality
+
+## Typical Workflow
+1. Load a CSV or tabular dataset
+2. Validate latitude/longitude fields
+3. Automatically fix common coordinate issues
+4. Generate a summary report
+5. Export cleaned data for further analysis (e.g. GIS, pandas)
+
+## Installation
+Using pip
+```bash
+pip install -r requirements.txt
+pip install -e .
 ```
-geocleanr/
-|-- README.md
-|-- LICENSE
+
+Using conda
+```bash
+conda env create -f environment.yml
+conda activate geocleanr
+pip install -e .
+```
+
+## Quick Verification (for reviewers)
+To quickly verify that the project works:
+```bash
+pip install -r requirements.txt
+pip install -e .
+python -m pytest
+```
+
+All tests should pass.
+
+For a functional demonstration, open:
+
+`examples/GeoCleanr_quickstart.md`
+
+or the example Jupyter notebook in the `examples/` folder.
+
+## Example Usage (Python)
+```python
+from geocleanr import GeometryValidator, CoordinateFixer
+
+validator = GeometryValidator(lat_field="latitude", lon_field="longitude")
+issues = validator.validate(rows)
+
+fixer = CoordinateFixer(lat_field="latitude", lon_field="longitude")
+cleaned = [fixer.fix_record(r).record for r in rows]
+```
+
+## Project Structure
+```
+GeoCleanr/
+|-- src/            # Core library code
+|-- tests/          # Automated tests
+|-- examples/       # Example notebook and usage guide
+|-- assets/         # Supporting assets
+|-- environment.yml # Conda environment
 |-- requirements.txt
-|-- environment.yml
 |-- pyproject.toml
-|-- src/
-|   `-- geocleanr/
-|       |-- __init__.py
-|       |-- validator.py
-|       |-- fixer.py
-|       |-- reporter.py
-|       |-- visualizer.py
-|       `-- cli.py
-|-- tests/
-|   |-- __init__.py
-|   |-- test_validator.py
-|   |-- test_fixer.py
-|   `-- test_end_to_end.py
-`-- examples/
-    `-- GeoCleanr_quickstart.md
+`-- README.md
 ```
 
-## Getting started
-1. Create a virtual environment and install the package:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Run the CLI against a CSV file containing `lat` and `lon` columns:
-   ```bash
-   python -m geocleanr.cli --input sample.csv --format csv --report report.md
-   ```
-3. Explore the quickstart in `examples/GeoCleanr_quickstart.md` for a guided workflow.
+## Intended Audience
+GeoCleanr is intended for students, researchers, and analysts who need to clean and validate geospatial coordinates in raw CSV or tabular data before further analysis or GIS processing.
 
-## Development
-- Install the project in editable mode with `pip install -e .` for rapid iteration.
-- Run tests with `pytest`.
-- The codebase follows a simple service-object style so new validators or fixers can be added without touching the CLI.
+## Limitations
+GeoCleanr focuses on coordinate-level validation and does not replace full GIS or CRS-aware validation tools such as GeoPandas or QGIS.
+
+## License
+This project is released under the MIT License.
