@@ -38,6 +38,8 @@ class CoordinateFixer:
         changes: dict[str, Tuple[Any, Any]] = {}
 
         # Pull raw values from the input record.
+        original_lat = record.get(self.lat_field)
+        original_lon = record.get(self.lon_field)
         lat = mutable.get(self.lat_field)
         lon = mutable.get(self.lon_field)
 
@@ -47,37 +49,37 @@ class CoordinateFixer:
         fixes.extend(lat_note)
         fixes.extend(lon_note)
         if lat_changed:
-            changes[self.lat_field] = (record.get(self.lat_field), lat)
+            changes[self.lat_field] = (original_lat, lat)
         if lon_changed:
-            changes[self.lon_field] = (record.get(self.lon_field), lon)
+            changes[self.lon_field] = (original_lon, lon)
 
         # If both are missing or broken, drop in the fallback pair.
         if lat is None and lon is None:
             mutable[self.lat_field], mutable[self.lon_field] = self.fallback
             fixes.append("filled_missing")
-            changes[self.lat_field] = (record.get(self.lat_field), self.fallback[0])
-            changes[self.lon_field] = (record.get(self.lon_field), self.fallback[1])
+            changes[self.lat_field] = (original_lat, self.fallback[0])
+            changes[self.lon_field] = (original_lon, self.fallback[1])
             return FixResult(dict(mutable), fixes, changes)
 
         # Fill only the missing side so we do not lose a good value.
         if lat is None:
             lat = self.fallback[0]
             fixes.append("lat_filled")
-            changes[self.lat_field] = (record.get(self.lat_field), lat)
+            changes[self.lat_field] = (original_lat, lat)
         if lon is None:
             lon = self.fallback[1]
             fixes.append("lon_filled")
-            changes[self.lon_field] = (record.get(self.lon_field), lon)
+            changes[self.lon_field] = (original_lon, lon)
 
         # Swap if numbers look like they are in the wrong columns.
         swapped = self._looks_swapped(lat, lon)
         if swapped:
             lat, lon = lon, lat
             fixes.append("swapped_axes")
-            changes[self.lat_field] = (record.get(self.lat_field), lat)
-            changes[self.lon_field] = (record.get(self.lon_field), lon)
+            changes[self.lat_field] = (original_lat, lat)
+            changes[self.lon_field] = (original_lon, lon)
 
-        # Normalize 0–360 longitudes to the usual -180–180 range.
+        # Normalize 0-360 longitudes to the usual -180-180 range.
         wrapped_lon, wrapped = self._wrap_longitude(lon)
         if wrapped:
             fixes.append("lon_wrapped")
@@ -89,10 +91,10 @@ class CoordinateFixer:
         lon, lon_outlier = self._handle_outlier(lon, self.fallback[1])
         if lat_outlier:
             fixes.append("lat_outlier")
-            changes[self.lat_field] = (record.get(self.lat_field), lat)
+            changes[self.lat_field] = (original_lat, lat)
         if lon_outlier:
             fixes.append("lon_outlier")
-            changes[self.lon_field] = (record.get(self.lon_field), lon)
+            changes[self.lon_field] = (original_lon, lon)
 
         if self.clip:
             # Push values back into legal ranges if they are slightly off but not extreme.
@@ -157,7 +159,7 @@ class CoordinateFixer:
         return abs(lat) > 90 and abs(lat) <= 180 and abs(lon) <= 90
 
     def _wrap_longitude(self, lon: float) -> Tuple[float, bool]:
-        # Convert 0–360 style longitudes to -180–180 so they can be clipped/validated.
+        # Convert 0-360 style longitudes to -180-180 so they can be clipped/validated.
         if -180 <= lon <= 180:
             return lon, False
         if -360 <= lon <= 360:
